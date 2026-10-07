@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f7a55">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Expenses">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Family Expenses</title>
+<style>
+:root{--bg:#f4f6f5;--card:#fff;--tx:#17211c;--mut:#6b7872;--pri:#0f7a55;--bd:#dfe5e2;--red:#c0392b}
+@media(prefers-color-scheme:dark){:root{--bg:#101513;--card:#19211d;--tx:#e8efeb;--mut:#8b9a93;--pri:#2fbf8a;--bd:#2a3530;--red:#ff7a6b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px system-ui,sans-serif;padding:12px;max-width:560px;margin:auto}
+h1{font-size:20px;margin:6px 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:12px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:8px 14px;border-radius:20px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:14px}
+.chip.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.sum b{display:block;font-size:17px}.sum span{font-size:12px;color:var(--mut)}
+.due{color:var(--red)}
+.tog{display:flex;gap:8px;margin-bottom:10px}
+.tog button{flex:1}
+input,select,textarea{width:100%;padding:11px;margin-bottom:8px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font:inherit}
+button{padding:11px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font:inherit}
+button.p{background:var(--pri);color:#fff;border-color:var(--pri);width:100%}
+.row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd);gap:8px}
+.row:last-child{border:0}.row small{color:var(--mut);display:block}
+.x{border:0;background:none;color:var(--red);font-size:18px;padding:4px 8px}
+.in{color:var(--pri)}
+textarea{height:260px;font-size:13px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+h3{margin:0 0 8px;font-size:15px}
+.mut{color:var(--mut);font-size:13px}
+</style></head><body>
+<h1>👨‍👩‍👧 Family Expenses</h1>
+
+<div class="card">
+  <div class="chips" id="chips"></div>
+  <div class="two" style="margin-top:10px">
+    <button onclick="addM()">＋ Add member</button>
+    <button onclick="delM()">🗑 Remove selected</button>
+  </div>
+</div>
+
+<div id="main"></div>
+
+<div class="card">
+  <h3>💾 Backup</h3>
+  <p class="mut">Data is saved in this browser on your phone. Export a backup now and then.</p>
+  <div class="two">
+    <button onclick="exp()">Export</button>
+    <button onclick="$('imp').click()">Import</button>
+  </div>
+  <input type="file" id="imp" accept=".json" hidden onchange="imp(this)">
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const MODES=['Cash','IDFC Credit Card','HDFC Credit Card','Axis Credit Card'];
+const PAYM=['Cash','UPI','Bank Transfer'];
+const ICON={'Cash':'💵','IDFC Credit Card':'💳','HDFC Credit Card':'💳','Axis Credit Card':'💳','UPI':'📱','Bank Transfer':'🏦'};
+let S;
+try{S=JSON.parse(localStorage.getItem('famexp'))}catch(e){}
+S=S||{members:[],tx:[],sel:null};
+let type='spend';
+const save=()=>{try{localStorage.setItem('famexp',JSON.stringify(S))}catch(e){alert('Could not save')}};
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+const dt=d=>new Date(d+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sum=(a)=>a.reduce((s,t)=>s+t.amt,0);
+const mem=()=>S.members.find(m=>m.id===S.sel);
+
+function addM(){
+  const n=(prompt('Member name')||'').trim(); if(!n)return;
+  const id='m'+Date.now(); S.members.push({id,name:n}); S.sel=id; save(); render();
+}
+function delM(){
+  const m=mem(); if(!m)return;
+  if(!confirm('Remove '+m.name+' and ALL their entries?'))return;
+  S.tx=S.tx.filter(t=>t.m!==m.id); S.members=S.members.filter(x=>x.id!==m.id);
+  S.sel=S.members[0]?.id||null; save(); render();
+}
+function setType(t){type=t;render()}
+function add(){
+  const amt=parseFloat($('amt').value);
+  const desc=$('desc').value.trim();
+  if(!amt||amt<=0)return alert('Enter a valid amount');
+  if(!desc)return alert(type==='spend'?'Enter what it was for':'Enter a note');
+  S.tx.push({id:'t'+Date.now(),m:S.sel,type,date:$('date').value||today(),desc,amt,mode:$('mode').value});
+  save(); render();
+}
+function del(id){ if(confirm('Delete this entry?')){S.tx=S.tx.filter(t=>t.id!==id);save();render()} }
+
+function build(m){
+  const all=S.tx.filter(t=>t.m===m.id).sort((a,b)=>a.date.localeCompare(b.date));
+  const sp=all.filter(t=>t.type==='spend'), pa=all.filter(t=>t.type==='pay');
+  const ts=sum(sp), tp=sum(pa), bal=ts-tp;
+  const line='━━━━━━━━━━━━━━';
+  let o=`🧾 *EXPENSE STATEMENT*\n👤 *${m.name}*\n📅 As on ${dt(today())}\n${line}\n\n`;
+  if(!sp.length) o+='_No expenses yet_\n\n';
+  sp.forEach((t,i)=>{
+    o+=`*${i+1}.* ${dt(t.date)}\n    📝 ${t.desc}\n    💰 *${inr(t.amt)}*\n\n`;
+  });
+  o+=`${line}\n💰 *Total Spent: ${inr(ts)}*\n`;
+  if(pa.length){
+    o+=`\n${line}\n✅ *PAYMENTS RECEIVED*\n\n`;
+    pa.forEach(t=>{o+=`▪️ ${dt(t.date)} — ${t.desc} (${t.mode}): *${inr(t.amt)}*\n`});
+    o+=`\n✅ *Total Received: ${inr(tp)}*\n`;
+  }
+  o+=`\n${line}\n`;
+  o+= bal>0 ? `🔴 *BALANCE DUE: ${inr(bal)}*` : bal<0 ? `🟢 *ADVANCE PAID: ${inr(-bal)}*` : '';
+  return {o,ts,tp,bal,all};
+}
+
+function render(){
+  if(!mem())S.sel=S.members[0]?.id||null;
+  $('chips').innerHTML=S.members.length?S.members.map(m=>`<button class="chip ${m.id===S.sel?'on':''}" onclick="S.sel='${m.id}';save();render()">${esc(m.name)}</button>`).join(''):'<span class="mut">Add your first family member 👆</span>';
+  const m=mem();
+  if(!m){$('main').innerHTML='';return}
+  const {o,ts,tp,bal,all}=build(m);
+  const modes=type==='spend'?MODES:PAYM;
+  const keep={d:$('date')?.value};
+  $('main').innerHTML=`
+  <div class="card"><div class="sum">
+    <div><b>${inr(ts)}</b><span>Spent</span></div>
+    <div><b class="in">${inr(tp)}</b><span>Received</span></div>
+    <div><b class="${bal>0?'due':'in'}">${inr(Math.abs(bal))}</b><span>${bal>=0?'Due':'Advance'}</span></div>
+  </div></div>
+  <div class="card">
+    <div class="tog">
+      <button class="${type==='spend'?'chip on':'chip'}" onclick="setType('spend')">💸 Spent</button>
+      <button class="${type==='pay'?'chip on':'chip'}" onclick="setType('pay')">✅ Received</button>
+    </div>
+    <input type="date" id="date" value="${keep.d||today()}">
+    <input id="desc" placeholder="${type==='spend'?'For what? (e.g. Groceries)':'Note (e.g. Paid via GPay)'}">
+    <input id="amt" type="number" inputmode="decimal" placeholder="Amount ₹">
+    <select id="mode">${modes.map(x=>`<option>${x}</option>`).join('')}</select>
+    <button class="p" onclick="add()">${type==='spend'?'Add expense':'Add payment received'}</button>
+  </div>
+  <div class="card"><h3>📒 ${esc(m.name)}'s entries</h3>
+    ${all.length?[...all].reverse().map(t=>`<div class="row"><div>${esc(t.desc)}<small>${dt(t.date)} · ${t.mode}</small></div>
+      <div><b class="${t.type==='pay'?'in':''}">${t.type==='pay'?'+':''}${inr(t.amt)}</b><button class="x" onclick="del('${t.id}')">✕</button></div></div>`).join(''):'<span class="mut">No entries yet</span>'}
+  </div>
+  <div class="card"><h3>📲 WhatsApp message</h3>
+    <textarea id="wa" readonly>${esc(o)}</textarea>
+    <div class="two">
+      <button onclick="cp()">📋 Copy</button>
+      <button class="p" onclick="send()">Send on WhatsApp</button>
+    </div>
+  </div>`;
+}
+function cp(){
+  const t=$('wa').value;
+  if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>alert('Copied ✔️'),fb);else fb();
+  function fb(){$('wa').select();document.execCommand('copy');alert('Copied ✔️')}
+}
+function send(){window.open('https://wa.me/?text='+encodeURIComponent($('wa').value),'_blank')}
+function exp(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));
+  a.download='family-expenses-backup.json';a.click();
+}
+function imp(el){
+  const f=el.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.members||!d.tx)throw 0;
+    if(confirm('Replace current data with backup?')){S=d;save();render()}}catch(e){alert('Invalid backup file')}};
+  r.readAsText(f);
+}
+render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
